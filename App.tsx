@@ -6,9 +6,11 @@ import {
   TouchableOpacity,
   Modal,
   StyleSheet,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import Toast from "react-native-toast-message";
 
 export default function App() {
   const [peso, setPeso] = useState("");
@@ -16,235 +18,436 @@ export default function App() {
   const [imc, setImc] = useState(null);
   const [classificacao, setClassificacao] = useState("");
   const [dica, setDica] = useState("");
+  const [diferencaPeso, setDiferencaPeso] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
-  const [corClassificacao, setCorClassificacao] = useState("#4CAF50"); // cor padrão (verde)
+  const [corClassificacao, setCorClassificacao] = useState("#6b5bff");
 
-  const calcularIMC = () => {
-    let pesoNum = parseFloat(peso.replace(",", "."));
-    let alturaNum = parseFloat(altura.replace(",", "."));
+  // Calcula quanto precisa ganhar/perder (usa IMC 18.5 e 24.9)
+  const calcularDiferencaPeso = (pesoAtual, alturaMetros, imcValor) => {
+    const pesoMin = 18.5 * alturaMetros * alturaMetros;
+    const pesoMax = 24.9 * alturaMetros * alturaMetros;
 
-    if (!peso || !altura) {
-      toast.warn("Preencha todos os campos!");
-      return;
+    if (imcValor < 18.5) {
+      const ganhar = pesoMin - pesoAtual;
+      return {
+        mensagem: `Você precisa ganhar pelo menos ${ganhar.toFixed(1)} kg para atingir IMC 18.5.`,
+        diferenca: ganhar,
+      };
     }
 
-    if (isNaN(pesoNum) || isNaN(alturaNum)) {
-      toast.error("Digite apenas números válidos!");
-      return;
+    if (imcValor > 24.9) {
+      const perder = pesoAtual - pesoMax;
+      return {
+        mensagem: `Você precisa perder pelo menos ${perder.toFixed(1)} kg para atingir IMC 24.9.`,
+        diferenca: perder,
+      };
     }
 
-    if (pesoNum <= 0) {
-      toast.error("O peso precisa ser maior que zero!");
-      return;
-    }
-
-    if (alturaNum <= 0) {
-      toast.error("A altura precisa ser maior que zero!");
-      return;
-    }
-
-    // Altura informada em centímetros → converte para metros
-    alturaNum = alturaNum / 100;
-
-    if (alturaNum > 3) {
-      toast.error("A altura máxima permitida é de 3 metros!");
-      return;
-    }
-
-    const valorIMC = pesoNum / (alturaNum * alturaNum);
-    const imcFormatado = valorIMC.toFixed(2);
-    const { classificacao, dica, cor } = gerarClassificacaoEDica(valorIMC);
-
-    setImc(imcFormatado);
-    setClassificacao(classificacao);
-    setDica(dica);
-    setCorClassificacao(cor);
-    setModalVisible(true);
+    return { mensagem: "Você está no peso ideal!", diferenca: 0 };
   };
 
-  const gerarClassificacaoEDica = (imc) => {
-    if (imc < 18.5)
+  // Gera classificação / dica / cor
+  const gerarClassificacaoEDica = (valorIMC) => {
+    if (valorIMC < 18.5)
       return {
         classificacao: "Abaixo do peso",
         dica:
-          "Procure incluir mais calorias e proteínas saudáveis na sua dieta. Consulte um nutricionista.",
-        cor: "#2196F3", // azul
+          "Procure incluir mais calorias e proteínas saudáveis na sua dieta. Consulte um nutricionista se possível.",
+        cor: "#4da6ff",
       };
-    else if (imc < 24.9)
+    else if (valorIMC < 24.9)
       return {
         classificacao: "Peso normal",
         dica:
-          "Continue mantendo uma alimentação equilibrada e pratique atividades físicas regularmente!",
-        cor: "#4CAF50", // verde
+          "Ótimo! Mantenha uma alimentação equilibrada e pratique atividade física regularmente.",
+        cor: "#28c76f",
       };
-    else if (imc < 29.9)
+    else if (valorIMC < 29.9)
       return {
         classificacao: "Sobrepeso",
         dica:
-          "Evite alimentos ultraprocessados e inclua mais frutas e verduras. Pequenas mudanças ajudam!",
-        cor: "#FFC107", // amarelo
+          "Reduza alimentos ultraprocessados, aumente fibras e pratique exercícios. Pequenas mudanças já ajudam.",
+        cor: "#ffb020",
       };
-    else if (imc < 34.9)
+    else if (valorIMC < 34.9)
       return {
         classificacao: "Obesidade grau I",
         dica:
-          "Busque acompanhamento profissional para ajustar sua alimentação e rotina de exercícios.",
-        cor: "#FF9800", // laranja
+          "Considere acompanhamento profissional para ajustar alimentação e rotina de exercícios.",
+        cor: "#ff8a65",
       };
-    else if (imc < 39.9)
+    else if (valorIMC < 39.9)
       return {
         classificacao: "Obesidade grau II",
         dica:
-          "É importante procurar um endocrinologista e adotar hábitos saudáveis de forma orientada.",
-        cor: "#FF5722", // laranja escuro
+          "Procure um médico e um nutricionista para acompanhamento individualizado.",
+        cor: "#ff7043",
       };
     else
       return {
         classificacao: "Obesidade grau III (grave)",
         dica:
-          "Cuide-se com ajuda médica especializada. Pequenos passos diários podem gerar grandes resultados.",
-        cor: "#f44336", // vermelho
+          "Acompanhamento médico especializado recomendado. Busque suporte de profissionais.",
+        cor: "#ff4d4f",
       };
   };
 
+  const validarENotificar = (tipo, mensagem) => {
+    // tipo: "info" | "error" | "success"
+    Toast.show({ type: tipo, text1: mensagem });
+  };
+
+  const calcularIMC = () => {
+    // aceita vírgula como separador
+    let pesoNum = parseFloat(peso.replace(",", "."));
+    let alturaNum = parseFloat(altura.replace(",", "."));
+
+    // campos vazios
+    if (!peso || !altura) {
+      validarENotificar("info", "Preencha todos os campos!");
+      return;
+    }
+
+    // número inválido
+    if (isNaN(pesoNum) || isNaN(alturaNum)) {
+      validarENotificar("error", "Digite apenas números válidos!");
+      return;
+    }
+
+    // valores maiores que zero
+    if (pesoNum <= 0) {
+      validarENotificar("error", "O peso precisa ser maior que zero!");
+      return;
+    }
+    if (alturaNum <= 0) {
+      validarENotificar("error", "A altura precisa ser maior que zero!");
+      return;
+    }
+
+    // Se usuário informar altura em centímetros (ex: 170), converte para metros.
+    // Heurística simples: se altura >= 3 assume que foi informada em cm (170 -> 1.70)
+    // Se já informada em metros (1.70) e <= 3, mantemos.
+    if (alturaNum > 3) {
+      // recebeu cm -> converte
+      alturaNum = alturaNum / 100;
+    }
+
+    // Limite máximo de altura em metros (3m)
+    if (alturaNum > 3) {
+      validarENotificar("error", "A altura máxima permitida é de 3 metros!");
+      return;
+    }
+
+    // cálculo do IMC
+    const valorIMC = pesoNum / (alturaNum * alturaNum);
+
+    if (!isFinite(valorIMC) || isNaN(valorIMC)) {
+      validarENotificar("error", "Não foi possível calcular o IMC com esses valores.");
+      return;
+    }
+
+    const imcFormatado = valorIMC.toFixed(2);
+    const { classificacao, dica, cor } = gerarClassificacaoEDica(valorIMC);
+    const diff = calcularDiferencaPeso(pesoNum, alturaNum, valorIMC);
+
+    setImc(imcFormatado);
+    setClassificacao(classificacao);
+    setDica(dica);
+    setDiferencaPeso(diff.mensagem);
+    setCorClassificacao(cor);
+    setModalVisible(true);
+  };
+
+  const tabela = [
+    { faixa: "Menor que 18.5", nome: "Abaixo do peso" },
+    { faixa: "18.5 - 24.9", nome: "Peso normal" },
+    { faixa: "25 - 29.9", nome: "Sobrepeso" },
+    { faixa: "30 - 34.9", nome: "Obesidade grau I" },
+    { faixa: "35 - 39.9", nome: "Obesidade grau II" },
+    { faixa: "40 ou mais", nome: "Obesidade grau III" },
+  ];
+
   return (
-    <View style={styles.container}>
-      <ToastContainer position="top-center" autoClose={3000} />
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <View style={styles.container}>
+        <Text style={styles.logo}>HappyBody</Text>
+        <Text style={styles.sub}>Calculadora de IMC</Text>
 
-      <Text style={styles.titulo}>HappyBody</Text>
+        <View style={styles.card}>
+          <Text style={styles.label}>Peso</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Ex: 68.5 (use vírgula ou ponto)"
+            placeholderTextColor="#bdbdbd"
+            keyboardType="numeric"
+            value={peso}
+            onChangeText={setPeso}
+          />
 
-      <Text style={styles.subtitulo}>Calculadora de IMC</Text>
+          <Text style={styles.label}>Altura</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Ex: 170 (cm) ou 1.70 (m)"
+            placeholderTextColor="#bdbdbd"
+            keyboardType="numeric"
+            value={altura}
+            onChangeText={setAltura}
+          />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Digite seu peso (kg)"
-        placeholderTextColor="#888"
-        keyboardType="numeric"
-        value={peso}
-        onChangeText={setPeso}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Digite sua altura (cm)"
-        placeholderTextColor="#888"
-        keyboardType="numeric"
-        value={altura}
-        onChangeText={setAltura}
-      />
-
-      <TouchableOpacity style={styles.botao} onPress={calcularIMC}>
-        <Text style={styles.textoBotao}>Calcular</Text>
-      </TouchableOpacity>
-
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalFundo}>
-          <View style={styles.modalConteudo}>
-            <Text style={styles.resultado}>Seu IMC é {imc}</Text>
-            <Text
-              style={[styles.classificacao, { color: corClassificacao }]}
-            >
-              {classificacao}
-            </Text>
-            <Text style={styles.dica}>{dica}</Text>
-
-            <TouchableOpacity
-              style={styles.fecharBotao}
-              onPress={() => setModalVisible(false)}
-            >
-              <Text style={styles.textoFechar}>Fechar</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.button} onPress={calcularIMC}>
+            <Text style={styles.buttonText}>Calcular</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
-    </View>
+
+        {/* Modal de resultado */}
+        <Modal visible={modalVisible} animationType="slide" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalBox}>
+              <ScrollView contentContainerStyle={styles.modalContent}>
+                <View style={styles.header}>
+                  <View style={[styles.badge, { backgroundColor: corClassificacao }]} />
+                  <Text style={styles.modalTitle}>Resultado</Text>
+                </View>
+
+                <Text style={styles.imcText}>Seu IMC: <Text style={styles.imcNumber}>{imc}</Text></Text>
+
+                <Text style={[styles.classText, { color: corClassificacao }]}>
+                  {classificacao}
+                </Text>
+
+                <Text style={styles.diffText}>{diferencaPeso}</Text>
+
+                <Text style={styles.helpText}>{dica}</Text>
+
+                <View style={styles.table}>
+                  {tabela.map((row, idx) => {
+                    const isActive = row.nome === classificacao;
+                    return (
+                      <View
+                        key={idx}
+                        style={[
+                          styles.tableRow,
+                          isActive ? styles.rowActive : null,
+                        ]}
+                      >
+                        <Text style={[styles.tableCell, isActive && styles.activeText]}>{row.faixa}</Text>
+                        <Text style={[styles.tableCell, isActive && styles.activeText]}>{row.nome}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={styles.closeText}>Fechar</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        <Toast />
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
-// 🎨 Estilos
+// Estilos modernos
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
+    backgroundColor: "#f5f7ff",
     alignItems: "center",
-    padding: 20,
-    backgroundColor: "#e6bebe79",
+    paddingHorizontal: 20,
+    paddingTop: 60,
   },
-  titulo: {
-    fontSize: 26,
-    fontWeight: "bold",
-    marginBottom: 20,
-    color: "#ca6060ff",
+
+  logo: {
+    fontSize: 34,
+    fontWeight: "800",
+    color: "#5a40ff",
+    letterSpacing: 0.5,
   },
-    subtitulo: {
-    fontSize: 20,
-    fontWeight: "bold",
+
+  sub: {
+    fontSize: 16,
+    color: "#6b6f82",
     marginBottom: 20,
-    color: "#e28a8aff",
+  },
+
+  card: {
+    width: "100%",
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 18,
+    shadowColor: "#2b2b2b",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 20,
+    elevation: 6,
+  },
+
+  label: {
+    color: "#6b6f82",
+    marginBottom: 6,
+    marginLeft: 6,
+    fontSize: 13,
   },
 
   input: {
-    width: "80%",
-    backgroundColor: "#fff",
-    padding: 10,
-    marginVertical: 10,
-    borderRadius: 10,
-    textAlign: "center",
-    fontSize: 18,
+    backgroundColor: "#f7f8ff",
+    padding: 14,
+    borderRadius: 12,
+    fontSize: 16,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: "#eef0ff",
   },
-  botao: {
-    backgroundColor: "#ca6060ff",
-    padding: 12,
-    borderRadius: 10,
-    marginTop: 15,
-    width: "60%",
+
+  button: {
+    marginTop: 6,
+    backgroundColor: "#5a40ff",
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: "center",
-  },
-  textoBotao: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  modalFundo: {
-    flex: 1,
     justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
+    shadowColor: "#5a40ff",
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 20,
+    elevation: 4,
   },
-  modalConteudo: {
+
+  buttonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 16,
+  },
+
+  /* Modal styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(12, 12, 20, 0.45)",
+    justifyContent: "center",
+    padding: 20,
+  },
+
+  modalBox: {
     backgroundColor: "#fff",
-    padding: 25,
-    borderRadius: 15,
-    width: "85%",
-    alignItems: "center",
-    elevation: 5,
+    borderRadius: 18,
+    padding: 16,
+    maxHeight: "85%",
   },
-  resultado: {
-    fontSize: 22,
-    fontWeight: "bold",
-    marginBottom: 10,
+
+  modalContent: {
+    alignItems: "center",
+    paddingBottom: 12,
+  },
+
+  header: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+
+  badge: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 10,
+  },
+
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
     color: "#222",
   },
-  classificacao: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 10,
+
+  imcText: {
+    fontSize: 18,
+    marginTop: 6,
+    color: "#444",
   },
-  dica: {
-    fontSize: 16,
+
+  imcNumber: {
+    fontWeight: "800",
+    color: "#111",
+    fontSize: 18,
+  },
+
+  classText: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 8,
+  },
+
+  diffText: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginTop: 8,
+    color: "#333",
     textAlign: "center",
-    color: "#555",
-    marginBottom: 20,
   },
-  fecharBotao: {
-    backgroundColor: "#ca6060ff",
-    padding: 10,
-    borderRadius: 10,
+
+  helpText: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginVertical: 12,
+    paddingHorizontal: 6,
   },
-  textoFechar: {
+
+  table: {
+    width: "100%",
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#eef0ff",
+    marginTop: 8,
+    marginBottom: 14,
+  },
+
+  tableRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: "#fff",
+  },
+
+  rowActive: {
+    backgroundColor: "#f6f0ff",
+  },
+
+  tableCell: {
+    fontSize: 14,
+    color: "#333",
+    flex: 1,
+  },
+
+  activeText: {
+    fontWeight: "800",
+    color: "#5a40ff",
+  },
+
+  closeButton: {
+    backgroundColor: "#5a40ff",
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 12,
+    marginTop: 6,
+    alignSelf: "center",
+  },
+
+  closeText: {
     color: "#fff",
-    fontWeight: "bold",
+    fontWeight: "700",
+    fontSize: 15,
   },
 });
