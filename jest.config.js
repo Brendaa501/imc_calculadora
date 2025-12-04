@@ -1,10 +1,10 @@
 module.exports = {
-  preset: "react-native",
+  preset: 'react-native',
+  setupFilesAfterEnv: ['<rootDir>/jest-setup.js'],
   transformIgnorePatterns: [
-    "node_modules/(?!(react-native|@react-native|react-toastify)/)",
+    "node_modules/(?!(react-native|@react-native|react-native-paper)/)"
   ],
   moduleNameMapper: {
-    "\\.(css|less|scss|sass)$": "identity-obj-proxy",
+    "^react-native-paper$": "<rootDir>/__mocks__/react-native-paper.js"
   },
-  setupFilesAfterEnv: ["@testing-library/jest-native/extend-expect"],
 };

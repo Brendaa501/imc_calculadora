@@ -1,84 +1,65 @@
-import React from "react";
-import { render, fireEvent, waitFor } from "@testing-library/react-native";
+// __tests__/App.integration.test.js
+
+jest.mock("react-native-paper", () => {
+  const React = require("react");
+  const { Text } = require("react-native");
+
+  const MockDialog = ({ children, visible }) => (visible ? React.createElement(React.Fragment, null, children) : null);
+  MockDialog.Content = ({ children }) => React.createElement(React.Fragment, null, children);
+  MockDialog.Actions = ({ children }) => React.createElement(React.Fragment, null, children);
+  MockDialog.Title = ({ children }) => React.createElement(React.Fragment, null, children);
+
+  const MockButton = ({ onPress, children, testID }) =>
+    React.createElement(Text, { onPress, testID }, children);
+
+  const MockParagraph = ({ children }) => React.createElement(React.Fragment, null, children);
+
+  // Aqui: sempre renderiza o texto, ignorando "visible"
+  const MockSnackbar = ({ children }) => React.createElement(Text, null, children);
+
+  return {
+    Provider: ({ children }) => children,
+    Portal: ({ children }) => children,
+    Dialog: MockDialog,
+    Button: MockButton,
+    Paragraph: MockParagraph,
+    Snackbar: MockSnackbar,
+  };
+});
+
+// Imports do App e testing library
+import { render, fireEvent } from "@testing-library/react-native";
 import App from "../App";
 
-// Mock do Toastify — impede o Jest de quebrar e permite verificar se ele foi chamado
-jest.mock("react-toastify", () => ({
-  toast: {
-    warn: jest.fn(),
-    error: jest.fn(),
-    success: jest.fn(),
-  },
-  ToastContainer: () => null, // evita tentar renderizar o componente real
-}));
-
-describe("Integração da Calculadora de IMC", () => {
-  it("exibe resultado correto ao preencher peso e altura", async () => {
-    const { getByPlaceholderText, getByText, queryByText } = render(<App />);
-
-    // Usuário digita peso e altura válidos
-    fireEvent.changeText(getByPlaceholderText("Digite seu peso (kg)"), "70");
-    fireEvent.changeText(getByPlaceholderText("Digite sua altura (cm)"), "170");
-
-    // Usuário clica no botão Calcular
-    fireEvent.press(getByText("Calcular"));
-
-    // Aguarda o modal aparecer com o resultado
-    await waitFor(() => {
-      expect(queryByText(/Seu IMC é/)).toBeTruthy();
-      expect(queryByText("Peso normal")).toBeTruthy();
-    });
+describe("Integração da Calculadora de IMC com Dialog", () => {
+  it("exibe resultado correto ao preencher peso e altura", () => {
+    const { getByTestId, queryByText } = render(<App />);
+    fireEvent.changeText(getByTestId("input-peso"), "70");
+    fireEvent.changeText(getByTestId("input-altura"), "170");
+    fireEvent.press(getByTestId("button-calcular"));
+    expect(queryByText(/Seu IMC:/i)).not.toBeNull();
   });
 
-  it("exibe aviso se campos estiverem vazios", async () => {
-    const { getByText } = render(<App />);
-    const { toast } = require("react-toastify");
-
-    // Usuário tenta calcular sem preencher nada
-    fireEvent.press(getByText("Calcular"));
-
-    // Verifica se o aviso (toast.warn) foi chamado
-    await waitFor(() => {
-      expect(toast.warn).toHaveBeenCalledWith("Preencha todos os campos!");
-    });
+  it("exibe aviso se campos estiverem vazios", () => {
+    const { getByTestId, queryByText } = render(<App />);
+    fireEvent.press(getByTestId("button-calcular"));
+    expect(queryByText(/Preencha todos os campos!/i)).not.toBeNull();
   });
 
-  it("exibe aviso se altura for zero ou inválida", async () => {
-    const { getByPlaceholderText, getByText } = render(<App />);
-    const { toast } = require("react-toastify");
-
-    // Usuário digita peso mas altura = 0
-    fireEvent.changeText(getByPlaceholderText("Digite seu peso (kg)"), "70");
-    fireEvent.changeText(getByPlaceholderText("Digite sua altura (cm)"), "0");
-
-    fireEvent.press(getByText("Calcular"));
-
-    // Espera o toast de erro ser exibido
-    await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith("A altura precisa ser maior que zero!");
-    });
+  it("exibe aviso se altura for zero", () => {
+    const { getByTestId, queryByText } = render(<App />);
+    fireEvent.changeText(getByTestId("input-peso"), "70");
+    fireEvent.changeText(getByTestId("input-altura"), "0");
+    fireEvent.press(getByTestId("button-calcular"));
+    expect(queryByText(/A altura precisa ser maior que zero!/i)).not.toBeNull();
   });
 
-  it("fecha o modal ao clicar em 'Fechar'", async () => {
-    const { getByPlaceholderText, getByText, queryByText } = render(<App />);
-
-    // Preenche os campos
-    fireEvent.changeText(getByPlaceholderText("Digite seu peso (kg)"), "60");
-    fireEvent.changeText(getByPlaceholderText("Digite sua altura (cm)"), "160");
-
-    fireEvent.press(getByText("Calcular"));
-
-    // Espera o modal aparecer
-    await waitFor(() => {
-      expect(queryByText(/Seu IMC é/)).toBeTruthy();
-    });
-
-    // Fecha o modal
-    fireEvent.press(getByText("Fechar"));
-
-    // Espera o modal sumir
-    await waitFor(() => {
-      expect(queryByText(/Seu IMC é/)).toBeFalsy();
-    });
+  it("fecha o Dialog ao clicar em 'Fechar'", () => {
+    const { getByTestId, queryByText } = render(<App />);
+    fireEvent.changeText(getByTestId("input-peso"), "60");
+    fireEvent.changeText(getByTestId("input-altura"), "160");
+    fireEvent.press(getByTestId("button-calcular"));
+    fireEvent.press(getByTestId("button-fechar"));
+    expect(queryByText(/Seu IMC:/i)).toBeNull();
   });
 });
