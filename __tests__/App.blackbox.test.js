@@ -4,6 +4,7 @@ import App from "../App";
 
 jest.mock("react-native-paper", () => {
   const React = require("react");
+  const { Text, TextInput } = require("react-native");
 
   const MockDialog = ({ children }) => <>{children}</>;
   MockDialog.Content = ({ children }) => <>{children}</>;
@@ -11,16 +12,16 @@ jest.mock("react-native-paper", () => {
   MockDialog.Title = ({ children }) => <>{children}</>;
 
   const MockSnackbar = ({ children, visible }) =>
-    visible ? <span>{children}</span> : null;
+    visible ? <Text>{children}</Text> : null;
 
   return {
     Provider: ({ children }) => <>{children}</>,
     Portal: ({ children }) => <>{children}</>,
-    Button: (props) => <button {...props}>{props.children}</button>,
-    TextInput: (props) => <input {...props} data-testid={props.testID} />,
+    Button: (props) => <Text onPress={props.onPress}>{props.children}</Text>,
+    TextInput,
     Dialog: MockDialog,
     Snackbar: MockSnackbar,
-    Text: (props) => <span {...props}>{props.children}</span>,
+    Text,
   };
 });
 
@@ -45,7 +46,8 @@ describe("Testes da Calculadora de IMC", () => {
       fireEvent.press(getByTestId("button-calcular"));
     });
 
-    // findByText espera o texto aparecer após atualização de estado
-    expect(await findByText(/preencha todos os campos/i)).toBeTruthy();
+    await waitFor(async () => {
+      expect(await findByText(/preencha todos os campos/i)).toBeTruthy();
+    });
   });
-});
+}); // <-- FALTAVA
